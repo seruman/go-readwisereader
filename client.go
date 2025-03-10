@@ -39,31 +39,8 @@ func NewClient(token string) *Client {
 }
 
 func (c *Client) List(ctx context.Context, params ListParams) (*ListResponse, error) {
-	resp, err := c.list(ctx, params)
+	lr, err := c.list(ctx, params)
 	if err != nil {
-		return nil, err
-	}
-
-	if resp.StatusCode == http.StatusTooManyRequests {
-		retryAfter := resp.Header.Get("Retry-After")
-		seconds, err := strconv.Atoi(retryAfter)
-		if err != nil {
-			return nil, fmt.Errorf("invalid retry-after header: %v: %w", retryAfter, err)
-		}
-
-		errRateLimited := &ErrorRateLimited{
-			RetryAfter: time.Duration(seconds) * time.Second,
-		}
-
-		return nil, errRateLimited
-	}
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("unexpected status code: %d", resp.StatusCode)
-	}
-
-	var lr listResponse
-	if err := json.NewDecoder(resp.Body).Decode(&lr); err != nil {
 		return nil, err
 	}
 
@@ -112,7 +89,7 @@ func (c *Client) ListPaginate(ctx context.Context, params ListParams) iter.Seq2[
 	}
 }
 
-func (c *Client) list(ctx context.Context, params ListParams) (*http.Response, error) {
+func (c *Client) list(ctx context.Context, params ListParams) (*listResponse, error) {
 	const url = addr + "/list"
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
@@ -126,10 +103,29 @@ func (c *Client) list(ctx context.Context, params ListParams) (*http.Response, e
 
 	req.URL.RawQuery = q.Encode()
 
-	resp, err := c.client.Do(req)
+	resp, err := c.do(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("unexpected status code: %d", resp.StatusCode)
+	}
+
+	var lr listResponse
+	if err := json.NewDecoder(resp.Body).Decode(&lr); err != nil {
+		return nil, err
+	}
+
+	return &lr, nil
+}
+
+func (c *Client) do(ctx context.Context, req *http.Request) (*http.Response, error) {
+	resp, err := c.client.Do(req.WithContext(ctx))
 	if err != nil {
 		return nil, fmt.Errorf("do: %w", err)
 	}
+
 	defer resp.Body.Close()
 
 	b, err := io.ReadAll(resp.Body)
@@ -138,6 +134,21 @@ func (c *Client) list(ctx context.Context, params ListParams) (*http.Response, e
 	}
 
 	resp.Body = io.NopCloser(bytes.NewReader(b))
+
+	if resp.StatusCode == http.StatusTooManyRequests {
+		retryAfter := resp.Header.Get("Retry-After")
+		seconds, err := strconv.Atoi(retryAfter)
+		if err != nil {
+			return nil, fmt.Errorf("invalid retry-after header: %v: %w", retryAfter, err)
+		}
+
+		errRateLimited := &ErrorRateLimited{
+			RetryAfter: time.Duration(seconds) * time.Second,
+		}
+
+		return nil, errRateLimited
+	}
+
 	return resp, nil
 }
 
@@ -317,7 +328,7 @@ func (dr *document) toDocument() Document {
 type dateValue time.Time
 
 func (tv *dateValue) UnmarshalJSON(data []byte) error {
-	var v interface{}
+	var v any
 	if err := json.Unmarshal(data, &v); err != nil {
 		return err
 	}
