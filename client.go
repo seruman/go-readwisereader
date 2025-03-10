@@ -89,6 +89,64 @@ func (c *Client) ListPaginate(ctx context.Context, params ListParams) iter.Seq2[
 	}
 }
 
+type SaveParams struct {
+	URL             string     `json:"url"`
+	HTML            *string    `json:"html,omitempty"`
+	ShouldCleanHTML *bool      `json:"should_clean_html,omitempty"`
+	Title           *string    `json:"title,omitempty"`
+	Author          *string    `json:"author,omitempty"`
+	Summary         *string    `json:"summary,omitempty"`
+	PublishedDate   *time.Time `json:"published_date,omitempty"`
+	ImageURL        *string    `json:"image_url,omitempty"`
+	Location        Location   `json:"location,omitempty"`
+	Category        Category   `json:"category,omitempty"`
+	SavedUsing      *string    `json:"saved_using,omitempty"`
+	Tags            []string   `json:"tags,omitempty"`
+	Notes           *string    `json:"notes,omitempty"`
+}
+
+func (c *Client) Save(ctx context.Context, params SaveParams) (*SaveResponse, error) {
+	sr, err := c.save(ctx, params)
+	if err != nil {
+		return nil, err
+	}
+
+	s := sr.toSaveResponse()
+	return &s, nil
+}
+
+func (c *Client) save(ctx context.Context, params SaveParams) (*saveResponse, error) {
+	const url = addr + "/save"
+
+	b, err := json.Marshal(params)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewReader(b))
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := c.do(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+
+	if resp.StatusCode != http.StatusCreated && resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("unexpected status code: %d", resp.StatusCode)
+	}
+
+	var sr saveResponse
+	if err := json.NewDecoder(resp.Body).Decode(&sr); err != nil {
+		return nil, err
+	}
+
+	return &sr, nil
+}
+
 func (c *Client) list(ctx context.Context, params ListParams) (*listResponse, error) {
 	const url = addr + "/list"
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
@@ -230,6 +288,18 @@ func (lr *listResponse) toListResponse() ListResponse {
 	}
 }
 
+type saveResponse struct {
+	ID  string `json:"id"`
+	URL string `json:"url"`
+}
+
+func (sr *saveResponse) toSaveResponse() SaveResponse {
+	return SaveResponse{
+		ID:  sr.ID,
+		URL: sr.URL,
+	}
+}
+
 type ListResponse struct {
 	// Cursor for the next page of results
 	NextPageCursor string
@@ -349,6 +419,11 @@ func (tv *dateValue) UnmarshalJSON(data []byte) error {
 	}
 
 	return nil
+}
+
+type SaveResponse struct {
+	ID  string
+	URL string
 }
 
 type ErrorRateLimited struct {
