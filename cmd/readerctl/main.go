@@ -31,9 +31,17 @@ func run(args []string) error {
 	stderr := os.Stderr
 	stdout := os.Stdout
 
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return err
+	}
+
+	defaultConfigPath := fmt.Sprintf("%s/.config/readerctl/config", home)
+
 	var rootopts RootOpts
 	rootfs := ff.NewFlagSet(args[0])
 	rootfs.StringVar(&rootopts.APIToken, 't', "api-token", "", "API token")
+	_ = rootfs.String('c', "config", defaultConfigPath, "config file")
 
 	withRootFlags := func(f func(context.Context, []string) error) func(context.Context, []string) error {
 		return func(ctx context.Context, args []string) error {
@@ -134,7 +142,13 @@ func run(args []string) error {
 		},
 	}
 
-	err := rootcmd.Parse(args[1:], ff.WithEnvVarPrefix("READERCTL"))
+	err = rootcmd.Parse(
+		args[1:],
+		ff.WithEnvVarPrefix("READERCTL"),
+		ff.WithConfigFileFlag("config"),
+		ff.WithConfigFileParser(ff.PlainParser),
+		ff.WithConfigAllowMissingFile(),
+	)
 	switch {
 	case errors.Is(err, ff.ErrHelp):
 		fmt.Fprintf(stderr, "%s\n", ffhelp.Command(rootcmd))
