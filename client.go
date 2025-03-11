@@ -115,6 +115,29 @@ func (c *Client) Save(ctx context.Context, params SaveParams) (*SaveResponse, er
 	return &s, nil
 }
 
+func (c *Client) Delete(ctx context.Context, ID string) error {
+	return c.delete(ctx, ID)
+}
+
+func (c *Client) delete(ctx context.Context, ID string) error {
+	url := fmt.Sprintf("%s/delete/%s", addr, ID)
+	req, err := http.NewRequestWithContext(ctx, "DELETE", url, nil)
+	if err != nil {
+		return err
+	}
+
+	resp, err := c.do(ctx, req)
+	if err != nil {
+		return err
+	}
+
+	if resp.StatusCode != http.StatusNoContent {
+		return fmt.Errorf("unexpected status code: %d", resp.StatusCode)
+	}
+
+	return nil
+}
+
 func (c *Client) save(ctx context.Context, params SaveParams) (*saveResponse, error) {
 	const url = addr + "/save"
 
