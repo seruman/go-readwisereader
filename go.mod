@@ -1,4 +1,4 @@
-module github.com/seruman/go-readwisereader
+module code.selman.me/go-readwisereader
 
 go 1.23.1
 
