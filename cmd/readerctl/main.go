@@ -11,7 +11,7 @@ import (
 	"github.com/peterbourgon/ff/v4"
 	"github.com/peterbourgon/ff/v4/ffhelp"
 
-	"github.com/seruman/go-readwisereader"
+	"code.selman.me/go-readwisereader"
 )
 
 type UsageError error
